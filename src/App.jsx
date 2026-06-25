@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── CONFIGURACIÓN SUPABASE ───────────────────────────────────────────────────
 const SUPABASE_URL = "https://zthbdddipsoqohxdljzk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0aGJkZGRpcHNvcW9oeGRsanprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzUyNzIsImV4cCI6MjA5NzgxMTI3Mn0.2NVuba1vzBxhL4tJrJlFoxeBwzIlnk7tTvxgVXOajMo";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -30,8 +29,13 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef([]);
-  const ubicacionRef = useRef(null);
-  const modoReporteRef = useRef(false);
+  const modoReporteRef = useRef(false); // ref para que el click del mapa siempre lo detecte
+  const marcadorUbicacion = useRef(null);
+
+  // Sincronizar modoReporte con ref
+  useEffect(() => {
+    modoReporteRef.current = modoReporte;
+  }, [modoReporte]);
 
   useEffect(() => {
     if (leafletMap.current) return;
@@ -45,48 +49,39 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
     script.onload = () => {
       const L = window.L;
-      // Centra en ubicación del usuario si existe, si no en Cali centro
-      const centro = ubicacionRef.current
-        ? [ubicacionRef.current.lat, ubicacionRef.current.lng]
-        : [3.4516, -76.532];
-      const map = L.map(mapRef.current, { zoomControl: true }).setView(centro, 15);
+      // Inicia siempre en Cali centro — luego se mueve al GPS
+      const map = L.map(mapRef.current, { zoomControl: true }).setView([3.4516, -76.532], 14);
       leafletMap.current = map;
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap", maxZoom: 19,
       }).addTo(map);
+      // Click en el mapa — usa ref para saber si está en modo reporte
       map.on("click", (e) => {
         if (modoReporteRef.current) {
           onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
         }
       });
-      // Marcador azul de tu ubicación
-      if (ubicacionRef.current) {
-        const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>`;
-        const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
-        L.marker([ubicacionRef.current.lat, ubicacionRef.current.lng], { icon }).addTo(map);
-      }
     };
     document.head.appendChild(script);
   }, []);
 
-  // Sincronizar modoReporte con ref para que el click del mapa lo detecte
+  // Cuando llega la ubicación del usuario — centra y pone punto azul
   useEffect(() => {
-    modoReporteRef.current = modoReporte;
-  }, [modoReporte]);
-
-  // Cuando llega la ubicación del usuario, centra el mapa
-  useEffect(() => {
-    ubicacionRef.current = ubicacionUsuario;
-    if (!leafletMap.current || !ubicacionUsuario) return;
-    leafletMap.current.setView([ubicacionUsuario.lat, ubicacionUsuario.lng], 15);
-    // Poner marcador azul de tu posición
+    if (!ubicacionUsuario || !leafletMap.current || !window.L) return;
     const L = window.L;
-    if (!L) return;
-    const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>`;
+    // Centrar mapa en ubicación del usuario
+    leafletMap.current.setView([ubicacionUsuario.lat, ubicacionUsuario.lng], 15);
+    // Quitar marcador anterior si existe
+    if (marcadorUbicacion.current) {
+      leafletMap.current.removeLayer(marcadorUbicacion.current);
+    }
+    // Poner punto azul de tu ubicación
+    const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.25);"></div>`;
     const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
-    L.marker([ubicacionUsuario.lat, ubicacionUsuario.lng], { icon }).addTo(leafletMap.current);
+    marcadorUbicacion.current = L.marker([ubicacionUsuario.lat, ubicacionUsuario.lng], { icon }).addTo(leafletMap.current);
   }, [ubicacionUsuario]);
 
+  // Renderizar pines de reportes
   useEffect(() => {
     if (!leafletMap.current || !window.L) return;
     const L = window.L;
@@ -207,7 +202,8 @@ function ModalReporte({ ubicacion, onClose, onSubmit, onCambiarUbicacion }) {
             )}
             {paso === 2 && (
               <div>
-                <div style={{ background:"#292524", borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", gap:8, alignItems:"center", justifyContent:"space-between" }}>
+                {/* Ubicación con botón cambiar */}
+                <div style={{ background:"#292524", borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                     <span>📍</span>
                     <div>
@@ -215,19 +211,24 @@ function ModalReporte({ ubicacion, onClose, onSubmit, onCambiarUbicacion }) {
                       <div style={{ color:"#FAFAF9", fontSize:12, fontFamily:"monospace" }}>{ubicacion.lat.toFixed(5)}, {ubicacion.lng.toFixed(5)}</div>
                     </div>
                   </div>
-                  <button onClick={onCambiarUbicacion} style={{ background:"#F9731622", border:"1px solid #F9731644", borderRadius:8, padding:"6px 10px", color:"#F97316", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>📍 Cambiar</button>
+                  <button onClick={onCambiarUbicacion} style={{ background:"#F9731622", border:"1px solid #F9731644", borderRadius:8, padding:"6px 10px", color:"#F97316", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                    📍 Cambiar
+                  </button>
                 </div>
                 <input type="text" placeholder="Barrio o sector (ej: El Peñón)" value={barrio} onChange={e => setBarrio(e.target.value)} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, marginBottom:12, boxSizing:"border-box" }} />
                 <textarea placeholder="Descríbelo brevemente... (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={3} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, resize:"none", marginBottom:12, boxSizing:"border-box" }} />
-                <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"14px", borderRadius:12, border:"2px dashed #44403C", cursor:"pointer", color:fotoPreview ? "#22C55E" : "#78716C", marginBottom:14, background:fotoPreview ? "#16A34A12" : "transparent" }}>
+                <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"14px", borderRadius:12, border:`2px dashed ${fotoPreview ? "#22C55E" : "#44403C"}`, cursor:"pointer", marginBottom:14, background:fotoPreview ? "#16A34A12" : "transparent" }}>
                   <input type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{ display:"none" }} />
-                  {fotoPreview ? <><span style={{ fontSize:20 }}>📸</span><span style={{ fontWeight:600 }}>Foto adjunta ✓</span></> : <><span style={{ fontSize:20 }}>📷</span><span>Tomar foto del daño </span><span style={{ color:"#EF4444", fontSize:11 }}>* obligatoria</span></>}
+                  {fotoPreview
+                    ? <><span style={{ fontSize:20, color:"#22C55E" }}>📸</span><span style={{ color:"#22C55E", fontWeight:600 }}>Foto adjunta ✓</span></>
+                    : <><span style={{ fontSize:20 }}>📷</span><span style={{ color:"#78716C" }}>Tomar foto del daño </span><span style={{ color:"#EF4444", fontSize:11 }}>* obligatoria</span></>
+                  }
                 </label>
                 {fotoPreview && <img src={fotoPreview} alt="preview" style={{ width:"100%", borderRadius:10, marginBottom:14, maxHeight:160, objectFit:"cover" }} />}
                 <div style={{ display:"flex", gap:12 }}>
                   <button onClick={() => setPaso(1)} style={{ flex:1, background:"#292524", color:"#A8A29E", border:"none", borderRadius:14, padding:"16px", fontSize:15, fontWeight:600, cursor:"pointer" }}>← Atrás</button>
-                  <button onClick={handleSubmit} disabled={enviando || !fotoFile} style={{ flex:2, background:enviando ? "#78716C" : !fotoFile ? "#292524" : "#F97316", color:"white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor:enviando || !fotoFile ? "not-allowed" : "pointer" }}>
-                    {enviando ? "Enviando..." : !fotoFile ? "📷 Foto requerida para reportar" : "📢 Reportar ahora"}
+                  <button onClick={handleSubmit} disabled={enviando || !fotoFile} style={{ flex:2, background:enviando ? "#78716C" : !fotoFile ? "#292524" : "#F97316", color:!fotoFile ? "#44403C" : "white", border:"none", borderRadius:14, padding:"16px", fontSize:15, fontWeight:700, cursor:enviando || !fotoFile ? "not-allowed" : "pointer" }}>
+                    {enviando ? "Enviando..." : !fotoFile ? "📷 Foto requerida" : "📢 Reportar ahora"}
                   </button>
                 </div>
               </div>
@@ -287,7 +288,7 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
           <div style={{ textAlign:"center", padding:"24px 0" }}>
             <div style={{ fontSize:56, marginBottom:12 }}>🎉</div>
             <h2 style={{ color:"#22C55E", fontSize:22, fontWeight:800, marginBottom:8 }}>¡Marcado como resuelto!</h2>
-            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:24 }}>El pin cambió a verde en el mapa. ¡Gracias por reportar el arreglo!</p>
+            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:24 }}>El pin cambió a verde. ¡Gracias por reportar el arreglo!</p>
             <button onClick={onClose} style={{ background:"#22C55E", color:"white", border:"none", borderRadius:12, padding:"14px 40px", fontSize:16, fontWeight:700, cursor:"pointer" }}>Ver en el mapa</button>
           </div>
         ) : (
@@ -296,7 +297,7 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
               <h2 style={{ color:"#FAFAF9", fontSize:20, fontWeight:800, margin:0 }}>¿Ya lo arreglaron?</h2>
               <button onClick={onClose} style={{ background:"#292524", border:"none", color:"#A8A29E", borderRadius:8, padding:"6px 10px", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
-            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:20, lineHeight:1.6 }}>Si pasaste por el lugar y ya está arreglado, sube una foto como evidencia y el pin cambiará a 🟢 en el mapa.</p>
+            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:20, lineHeight:1.6 }}>Si pasaste por el lugar y ya está arreglado, sube una foto como evidencia y el pin cambiará a 🟢.</p>
             <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, padding:"20px", borderRadius:12, border:`2px dashed ${fotoPreview ? "#22C55E" : "#44403C"}`, cursor:"pointer", marginBottom:16, background:fotoPreview ? "#16A34A12" : "transparent" }}>
               <input type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{ display:"none" }} />
               {fotoPreview
@@ -392,17 +393,15 @@ export default function App() {
   const [reporteSeleccionado, setReporteSeleccionado] = useState(null);
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [modoReporte, setModoReporte] = useState(false);
-  const [ubicacionUsuario, setUbicacionUsuario] = useState(null); // ← NUEVO
+  const [ubicacionUsuario, setUbicacionUsuario] = useState(null);
 
   useEffect(() => {
     cargarReportes();
-    // Centrar mapa en ubicación del usuario al abrir la app
+    // Obtener ubicación del usuario al abrir la app
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {} // Si niega el permiso queda en Cali centro
+        (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {} // Si niega, queda en Cali centro
       );
     }
   }, []);
@@ -419,17 +418,27 @@ export default function App() {
   const handleMapClick = ({ lat, lng }) => {
     if (!modoReporte) return;
     setNuevaUbicacion({ lat, lng });
-    setModalReporte(true);
     setModoReporte(false);
+    setModalReporte(true);
   };
 
   const handleNuevoReporte = () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => { setNuevaUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setModalReporte(true); },
-        () => { setModoReporte(true); setVistaActiva("mapa"); }
+        (pos) => {
+          setNuevaUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setModalReporte(true);
+        },
+        () => {
+          // GPS no disponible — activar modo reporte manual
+          setModoReporte(true);
+          setVistaActiva("mapa");
+        }
       );
-    } else { setModoReporte(true); setVistaActiva("mapa"); }
+    } else {
+      setModoReporte(true);
+      setVistaActiva("mapa");
+    }
   };
 
   const handleSubmitReporte = (nuevo) => setReportes(prev => [nuevo, ...prev]);
@@ -466,7 +475,7 @@ export default function App() {
             <div style={{ color:"#FAFAF9", fontWeight:900, fontSize:18, letterSpacing:"-0.5px" }}>Bache<span style={{ color:"#F97316" }}>Alert</span></div>
             <div style={{ color:"#78716C", fontSize:11 }}>
               Cali, Valle del Cauca
-              {ubicacionUsuario && <span style={{ color:"#3B82F6", marginLeft:6 }}>📍 Tu ubicación activa</span>}
+              {ubicacionUsuario && <span style={{ color:"#3B82F6", marginLeft:6 }}>📍 Ubicación activa</span>}
             </div>
           </div>
         </div>
@@ -476,9 +485,10 @@ export default function App() {
         </div>
       </header>
 
+      {/* Banner modo reporte */}
       {modoReporte && (
-        <div style={{ background:"#F97316", color:"white", textAlign:"center", padding:"10px", fontSize:14, fontWeight:600, flexShrink:0, zIndex:200 }}>
-          📍 Toca el mapa para marcar la ubicación del daño
+        <div style={{ background:"#F97316", color:"white", textAlign:"center", padding:"12px", fontSize:14, fontWeight:700, flexShrink:0, zIndex:200 }}>
+          👆 Toca el mapa para marcar la ubicación del daño
         </div>
       )}
 
@@ -504,6 +514,7 @@ export default function App() {
               ubicacionUsuario={ubicacionUsuario}
               modoReporte={modoReporte}
             />
+            {/* Leyenda */}
             <div style={{ position:"absolute", top:12, right:12, zIndex:500, background:"rgba(28,25,23,0.93)", borderRadius:12, padding:"10px 14px" }}>
               <div style={{ color:"#78716C", fontSize:10, marginBottom:6, fontWeight:600 }}>LEYENDA</div>
               <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🔴</span><span style={{ color:"#A8A29E", fontSize:11 }}>Reportado</span></div>
@@ -609,11 +620,11 @@ export default function App() {
 
       {/* Modales */}
       {modalReporte && nuevaUbicacion && (
-        <ModalReporte 
-          ubicacion={nuevaUbicacion} 
-          onClose={() => { setModalReporte(false); setNuevaUbicacion(null); }} 
+        <ModalReporte
+          ubicacion={nuevaUbicacion}
+          onClose={() => { setModalReporte(false); setNuevaUbicacion(null); }}
           onSubmit={handleSubmitReporte}
-          onCambiarUbicacion={() => { setModalReporte(false); setModoReporte(true); setVistaActiva("mapa"); }}
+          onCambiarUbicacion={() => { setModalReporte(false); setNuevaUbicacion(null); setModoReporte(true); setVistaActiva("mapa"); }}
         />
       )}
       {modalResuelto && reporteSeleccionado && (
