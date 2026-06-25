@@ -26,11 +26,12 @@ function pinSize(votos) {
 }
 
 // ─── Mapa ─────────────────────────────────────────────────────────────────────
-function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSeleccionado, ubicacionUsuario }) {
+function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSeleccionado, ubicacionUsuario, modoReporte }) {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef([]);
   const ubicacionRef = useRef(null);
+  const modoReporteRef = useRef(false);
 
   useEffect(() => {
     if (leafletMap.current) return;
@@ -53,7 +54,11 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap", maxZoom: 19,
       }).addTo(map);
-      map.on("click", (e) => onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng }));
+      map.on("click", (e) => {
+        if (modoReporteRef.current) {
+          onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+        }
+      });
       // Marcador azul de tu ubicación
       if (ubicacionRef.current) {
         const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>`;
@@ -63,6 +68,11 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
     };
     document.head.appendChild(script);
   }, []);
+
+  // Sincronizar modoReporte con ref para que el click del mapa lo detecte
+  useEffect(() => {
+    modoReporteRef.current = modoReporte;
+  }, [modoReporte]);
 
   // Cuando llega la ubicación del usuario, centra el mapa
   useEffect(() => {
@@ -112,7 +122,7 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
 }
 
 // ─── Modal Reportar ───────────────────────────────────────────────────────────
-function ModalReporte({ ubicacion, onClose, onSubmit }) {
+function ModalReporte({ ubicacion, onClose, onSubmit, onCambiarUbicacion }) {
   const [tipo, setTipo] = useState("bache");
   const [descripcion, setDescripcion] = useState("");
   const [barrio, setBarrio] = useState("");
@@ -136,8 +146,9 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
     try {
       let foto_url = null;
       if (fotoFile) {
-        const nombre = `reporte_${Date.now()}.jpg`;
-        const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: "image/jpeg" });
+        const ext = fotoFile.name.split('.').pop() || 'jpg';
+        const nombre = `reporte_${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: fotoFile.type || "image/jpeg" });
         if (!upErr) {
           const { data: urlData } = supabase.storage.from("fotos-reportes").getPublicUrl(nombre);
           foto_url = urlData.publicUrl;
@@ -196,12 +207,15 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
             )}
             {paso === 2 && (
               <div>
-                <div style={{ background:"#292524", borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
-                  <span>📍</span>
-                  <div>
-                    <div style={{ color:"#A8A29E", fontSize:12 }}>Ubicación capturada</div>
-                    <div style={{ color:"#FAFAF9", fontSize:12, fontFamily:"monospace" }}>{ubicacion.lat.toFixed(5)}, {ubicacion.lng.toFixed(5)}</div>
+                <div style={{ background:"#292524", borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", gap:8, alignItems:"center", justifyContent:"space-between" }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <span>📍</span>
+                    <div>
+                      <div style={{ color:"#A8A29E", fontSize:12 }}>Ubicación capturada</div>
+                      <div style={{ color:"#FAFAF9", fontSize:12, fontFamily:"monospace" }}>{ubicacion.lat.toFixed(5)}, {ubicacion.lng.toFixed(5)}</div>
+                    </div>
                   </div>
+                  <button onClick={onCambiarUbicacion} style={{ background:"#F9731622", border:"1px solid #F9731644", borderRadius:8, padding:"6px 10px", color:"#F97316", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>📍 Cambiar</button>
                 </div>
                 <input type="text" placeholder="Barrio o sector (ej: El Peñón)" value={barrio} onChange={e => setBarrio(e.target.value)} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, marginBottom:12, boxSizing:"border-box" }} />
                 <textarea placeholder="Descríbelo brevemente... (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={3} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, resize:"none", marginBottom:12, boxSizing:"border-box" }} />
@@ -247,8 +261,9 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
     setEnviando(true);
     try {
       let foto_resuelto_url = null;
-      const nombre = `resuelto_${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: "image/jpeg" });
+      const ext = fotoFile.name.split('.').pop() || 'jpg';
+      const nombre = `resuelto_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: fotoFile.type || "image/jpeg" });
       if (!upErr) {
         const { data: urlData } = supabase.storage.from("fotos-reportes").getPublicUrl(nombre);
         foto_resuelto_url = urlData.publicUrl;
@@ -487,6 +502,7 @@ export default function App() {
               reporteSeleccionado={reporteSeleccionado}
               setReporteSeleccionado={setReporteSeleccionado}
               ubicacionUsuario={ubicacionUsuario}
+              modoReporte={modoReporte}
             />
             <div style={{ position:"absolute", top:12, right:12, zIndex:500, background:"rgba(28,25,23,0.93)", borderRadius:12, padding:"10px 14px" }}>
               <div style={{ color:"#78716C", fontSize:10, marginBottom:6, fontWeight:600 }}>LEYENDA</div>
@@ -593,7 +609,12 @@ export default function App() {
 
       {/* Modales */}
       {modalReporte && nuevaUbicacion && (
-        <ModalReporte ubicacion={nuevaUbicacion} onClose={() => { setModalReporte(false); setNuevaUbicacion(null); }} onSubmit={handleSubmitReporte} />
+        <ModalReporte 
+          ubicacion={nuevaUbicacion} 
+          onClose={() => { setModalReporte(false); setNuevaUbicacion(null); }} 
+          onSubmit={handleSubmitReporte}
+          onCambiarUbicacion={() => { setModalReporte(false); setModoReporte(true); setVistaActiva("mapa"); }}
+        />
       )}
       {modalResuelto && reporteSeleccionado && (
         <ModalResuelto reporte={reporteSeleccionado} onClose={() => setModalResuelto(false)} onResuelto={handleResuelto} />
