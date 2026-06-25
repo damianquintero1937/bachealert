@@ -31,6 +31,7 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
   const markersRef = useRef([]);
   const modoReporteRef = useRef(false); // ref para que el click del mapa siempre lo detecte
   const marcadorUbicacion = useRef(null);
+  const ubicacionRef = useRef(ubicacionUsuario);
 
   // Sincronizar modoReporte con ref
   useEffect(() => {
@@ -45,40 +46,55 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
       link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
       document.head.appendChild(link);
     }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-    script.onload = () => {
+
+    const iniciarMapa = () => {
       const L = window.L;
-      // Inicia siempre en Cali centro — luego se mueve al GPS
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([3.4516, -76.532], 14);
+      const centro = ubicacionRef.current
+        ? [ubicacionRef.current.lat, ubicacionRef.current.lng]
+        : [3.4516, -76.532];
+      const zoom = ubicacionRef.current ? 16 : 14;
+      const map = L.map(mapRef.current, { zoomControl: true }).setView(centro, zoom);
       leafletMap.current = map;
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap", maxZoom: 19,
       }).addTo(map);
-      // Click en el mapa — usa ref para saber si está en modo reporte
+      // Poner punto azul si ya tenemos ubicación
+      if (ubicacionRef.current) {
+        const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.25);"></div>`;
+        const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
+        marcadorUbicacion.current = L.marker([ubicacionRef.current.lat, ubicacionRef.current.lng], { icon }).addTo(map);
+      }
+      // Click en el mapa
       map.on("click", (e) => {
         if (modoReporteRef.current) {
           onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
         }
       });
     };
-    document.head.appendChild(script);
+
+    if (window.L) {
+      iniciarMapa();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      script.onload = iniciarMapa;
+      document.head.appendChild(script);
+    }
   }, []);
 
   // Cuando llega la ubicación del usuario — centra y pone punto azul
   useEffect(() => {
-    if (!ubicacionUsuario || !leafletMap.current || !window.L) return;
-    const L = window.L;
-    // Centrar mapa en ubicación del usuario
-    leafletMap.current.setView([ubicacionUsuario.lat, ubicacionUsuario.lng], 15);
-    // Quitar marcador anterior si existe
-    if (marcadorUbicacion.current) {
-      leafletMap.current.removeLayer(marcadorUbicacion.current);
+    ubicacionRef.current = ubicacionUsuario;
+    if (!ubicacionUsuario) return;
+    // Si el mapa ya está listo, centrar ahora
+    if (leafletMap.current && window.L) {
+      const L = window.L;
+      leafletMap.current.setView([ubicacionUsuario.lat, ubicacionUsuario.lng], 16);
+      if (marcadorUbicacion.current) leafletMap.current.removeLayer(marcadorUbicacion.current);
+      const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.25);"></div>`;
+      const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
+      marcadorUbicacion.current = L.marker([ubicacionUsuario.lat, ubicacionUsuario.lng], { icon }).addTo(leafletMap.current);
     }
-    // Poner punto azul de tu ubicación
-    const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.25);"></div>`;
-    const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
-    marcadorUbicacion.current = L.marker([ubicacionUsuario.lat, ubicacionUsuario.lng], { icon }).addTo(leafletMap.current);
   }, [ubicacionUsuario]);
 
   // Renderizar pines de reportes
@@ -397,11 +413,16 @@ export default function App() {
 
   useEffect(() => {
     cargarReportes();
-    // Obtener ubicación del usuario al abrir la app
+    // Pedir GPS inmediatamente al abrir la app
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {} // Si niega, queda en Cali centro
+        (pos) => {
+          setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.log("GPS no disponible:", err.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
   }, []);
