@@ -2,11 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ─── CONFIGURACIÓN SUPABASE ───────────────────────────────────────────────────
-const SUPABASE_URL = "https://zthbdddipsoqohxdljzk.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0aGJkZGRpcHNvcW9oeGRsanprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzUyNzIsImV4cCI6MjA5NzgxMTI3Mn0.2NVuba1vzBxhL4tJrJlFoxeBwzIlnk7tTvxgVXOajMo";
+const SUPABASE_URL = "https://TU_URL_AQUI.supabase.co";
+const SUPABASE_KEY = "TU_ANON_KEY_AQUI";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ─── Configuraciones visuales ─────────────────────────────────────────────────
 const TIPO_CONFIG = {
   bache:  { label: "Bache / Hueco", emoji: "🕳️", color: "#EF4444" },
   luz:    { label: "Daño de Luz",   emoji: "💡", color: "#F59E0B" },
@@ -18,7 +17,6 @@ const ESTADO_CONFIG = {
   resuelto:  { label: "Resuelto",  color: "#22C55E", dot: "🟢" },
 };
 
-// tamaño del pin según votos
 function pinSize(votos) {
   if (votos >= 50) return 64;
   if (votos >= 20) return 52;
@@ -28,10 +26,11 @@ function pinSize(votos) {
 }
 
 // ─── Mapa ─────────────────────────────────────────────────────────────────────
-function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSeleccionado, modoReporte }) {
+function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSeleccionado, ubicacionUsuario }) {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef([]);
+  const ubicacionRef = useRef(null);
 
   useEffect(() => {
     if (leafletMap.current) return;
@@ -45,20 +44,44 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
     script.onload = () => {
       const L = window.L;
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([3.4516, -76.532], 14);
+      // Centra en ubicación del usuario si existe, si no en Cali centro
+      const centro = ubicacionRef.current
+        ? [ubicacionRef.current.lat, ubicacionRef.current.lng]
+        : [3.4516, -76.532];
+      const map = L.map(mapRef.current, { zoomControl: true }).setView(centro, 15);
       leafletMap.current = map;
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap", maxZoom: 19,
+      }).addTo(map);
       map.on("click", (e) => onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng }));
+      // Marcador azul de tu ubicación
+      if (ubicacionRef.current) {
+        const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>`;
+        const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
+        L.marker([ubicacionRef.current.lat, ubicacionRef.current.lng], { icon }).addTo(map);
+      }
     };
     document.head.appendChild(script);
   }, []);
+
+  // Cuando llega la ubicación del usuario, centra el mapa
+  useEffect(() => {
+    ubicacionRef.current = ubicacionUsuario;
+    if (!leafletMap.current || !ubicacionUsuario) return;
+    leafletMap.current.setView([ubicacionUsuario.lat, ubicacionUsuario.lng], 15);
+    // Poner marcador azul de tu posición
+    const L = window.L;
+    if (!L) return;
+    const iconHtml = `<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>`;
+    const icon = L.divIcon({ html: iconHtml, iconSize: [16, 16], iconAnchor: [8, 8], className: "" });
+    L.marker([ubicacionUsuario.lat, ubicacionUsuario.lng], { icon }).addTo(leafletMap.current);
+  }, [ubicacionUsuario]);
 
   useEffect(() => {
     if (!leafletMap.current || !window.L) return;
     const L = window.L;
     markersRef.current.forEach(m => leafletMap.current.removeLayer(m));
     markersRef.current = [];
-
     reportes.forEach(r => {
       const cfg = TIPO_CONFIG[r.tipo] || TIPO_CONFIG.bache;
       const isSelected = reporteSeleccionado?.id === r.id;
@@ -66,16 +89,14 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
       const size = isResuelto ? 34 : pinSize(r.votos || 1);
       const pulsa = !isResuelto && (r.votos || 1) >= 5;
       const color = isResuelto ? "#22C55E" : cfg.color;
-
       const iconHtml = `
-        <div style="position:relative;width:${size}px;height:${size}px;transition:all 0.3s;">
+        <div style="position:relative;width:${size}px;height:${size}px;">
           ${pulsa ? `<div style="position:absolute;inset:0;border-radius:50%;background:${color}44;animation:pulse 1.5s infinite;"></div>` : ""}
-          <div style="position:absolute;inset:${isSelected ? 2 : 4}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.4)}px;box-shadow:0 2px 12px ${color}99;border:2px solid white;">
+          <div style="position:absolute;inset:${isSelected ? 2 : 4}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.4)}px;box-shadow:0 2px 12px ${color}99;border:2px solid white;">
             ${isResuelto ? "✅" : cfg.emoji}
           </div>
-          ${(r.votos || 1) >= 10 ? `<div style="position:absolute;top:-6px;right:-6px;background:#F97316;color:white;border-radius:99px;font-size:9px;font-weight:900;padding:2px 5px;border:1.5px solid white;">${r.votos}</div>` : ""}
+          ${(r.votos||1) >= 10 ? `<div style="position:absolute;top:-6px;right:-6px;background:#F97316;color:white;border-radius:99px;font-size:9px;font-weight:900;padding:2px 5px;border:1.5px solid white;">${r.votos}</div>` : ""}
         </div>`;
-
       const icon = L.divIcon({ html: iconHtml, iconSize: [size, size], iconAnchor: [size/2, size/2], className: "" });
       const marker = L.marker([r.lat, r.lng], { icon }).addTo(leafletMap.current).on("click", () => setReporteSeleccionado(r));
       markersRef.current.push(marker);
@@ -90,7 +111,7 @@ function MapaReportes({ reportes, onMapClick, reporteSeleccionado, setReporteSel
   );
 }
 
-// ─── Modal Reportar daño ──────────────────────────────────────────────────────
+// ─── Modal Reportar ───────────────────────────────────────────────────────────
 function ModalReporte({ ubicacion, onClose, onSubmit }) {
   const [tipo, setTipo] = useState("bache");
   const [descripcion, setDescripcion] = useState("");
@@ -140,7 +161,6 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
     <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.8)", backdropFilter:"blur(4px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div style={{ background:"#1C1917", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:480, padding:"24px", maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ width:48, height:4, background:"#44403C", borderRadius:99, margin:"0 auto 20px" }} />
-
         {paso === 3 ? (
           <div style={{ textAlign:"center", padding:"32px 0" }}>
             <div style={{ fontSize:64, marginBottom:16 }}>✅</div>
@@ -154,19 +174,18 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
               <h2 style={{ color:"#FAFAF9", fontSize:20, fontWeight:800, margin:0 }}>{paso === 1 ? "¿Qué encontraste?" : "Cuéntanos más"}</h2>
               <button onClick={onClose} style={{ background:"#292524", border:"none", color:"#A8A29E", borderRadius:8, padding:"6px 10px", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
-
             {paso === 1 && (
               <div>
                 <div style={{ display:"grid", gap:12, marginBottom:24 }}>
                   {Object.entries(TIPO_CONFIG).map(([key, cfg]) => (
-                    <button key={key} onClick={() => setTipo(key)} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px", borderRadius:14, border:`2px solid ${tipo === key ? cfg.color : "#292524"}`, background:tipo === key ? `${cfg.color}18` : "#292524", cursor:"pointer", textAlign:"left" }}>
+                    <button key={key} onClick={() => setTipo(key)} style={{ display:"flex", alignItems:"center", gap:14, padding:"16px", borderRadius:14, border:`2px solid ${tipo===key ? cfg.color : "#292524"}`, background:tipo===key ? `${cfg.color}18` : "#292524", cursor:"pointer", textAlign:"left" }}>
                       <span style={{ fontSize:28 }}>{cfg.emoji}</span>
                       <div>
                         <div style={{ color:"#FAFAF9", fontWeight:700, fontSize:16 }}>{cfg.label}</div>
                         <div style={{ color:"#78716C", fontSize:13 }}>
-                          {key === "bache" && "Huecos, grietas, daños en el asfalto"}
-                          {key === "luz" && "Postes, semáforos, alumbrado público"}
-                          {key === "basura" && "Acumulación, puntos negros, escombros"}
+                          {key==="bache" && "Huecos, grietas, daños en el asfalto"}
+                          {key==="luz" && "Postes, semáforos, alumbrado público"}
+                          {key==="basura" && "Acumulación, puntos negros, escombros"}
                         </div>
                       </div>
                     </button>
@@ -175,7 +194,6 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
                 <button onClick={() => setPaso(2)} style={{ width:"100%", background:"#F97316", color:"white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor:"pointer" }}>Siguiente →</button>
               </div>
             )}
-
             {paso === 2 && (
               <div>
                 <div style={{ background:"#292524", borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", gap:8, alignItems:"center" }}>
@@ -187,15 +205,15 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
                 </div>
                 <input type="text" placeholder="Barrio o sector (ej: El Peñón)" value={barrio} onChange={e => setBarrio(e.target.value)} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, marginBottom:12, boxSizing:"border-box" }} />
                 <textarea placeholder="Descríbelo brevemente... (opcional)" value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={3} style={{ width:"100%", background:"#292524", border:"1.5px solid #44403C", borderRadius:10, padding:"12px 14px", color:"#FAFAF9", fontSize:15, resize:"none", marginBottom:12, boxSizing:"border-box" }} />
-                <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"14px", borderRadius:12, border:"2px dashed #44403C", cursor:"pointer", color: fotoPreview ? "#22C55E" : "#78716C", marginBottom:20, background: fotoPreview ? "#16A34A12" : "transparent" }}>
+                <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"14px", borderRadius:12, border:"2px dashed #44403C", cursor:"pointer", color:fotoPreview ? "#22C55E" : "#78716C", marginBottom:14, background:fotoPreview ? "#16A34A12" : "transparent" }}>
                   <input type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{ display:"none" }} />
-                  {fotoPreview ? <><span style={{ fontSize:20 }}>📸</span><span style={{ fontWeight:600 }}>Foto adjunta ✓</span></> : <><span style={{ fontSize:20 }}>📷</span><span>Tomar foto del daño</span></>}
+                  {fotoPreview ? <><span style={{ fontSize:20 }}>📸</span><span style={{ fontWeight:600 }}>Foto adjunta ✓</span></> : <><span style={{ fontSize:20 }}>📷</span><span>Tomar foto del daño </span><span style={{ color:"#EF4444", fontSize:11 }}>* obligatoria</span></>}
                 </label>
                 {fotoPreview && <img src={fotoPreview} alt="preview" style={{ width:"100%", borderRadius:10, marginBottom:14, maxHeight:160, objectFit:"cover" }} />}
                 <div style={{ display:"flex", gap:12 }}>
                   <button onClick={() => setPaso(1)} style={{ flex:1, background:"#292524", color:"#A8A29E", border:"none", borderRadius:14, padding:"16px", fontSize:15, fontWeight:600, cursor:"pointer" }}>← Atrás</button>
-                  <button onClick={handleSubmit} disabled={enviando} style={{ flex:2, background:enviando ? "#78716C" : "#F97316", color:"white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor:enviando ? "not-allowed" : "pointer" }}>
-                    {enviando ? "Enviando..." : "📢 Reportar ahora"}
+                  <button onClick={handleSubmit} disabled={enviando || !fotoFile} style={{ flex:2, background:enviando ? "#78716C" : !fotoFile ? "#292524" : "#F97316", color:"white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor:enviando || !fotoFile ? "not-allowed" : "pointer" }}>
+                    {enviando ? "Enviando..." : !fotoFile ? "📷 Foto requerida para reportar" : "📢 Reportar ahora"}
                   </button>
                 </div>
               </div>
@@ -207,7 +225,7 @@ function ModalReporte({ ubicacion, onClose, onSubmit }) {
   );
 }
 
-// ─── Modal Marcar como Resuelto ───────────────────────────────────────────────
+// ─── Modal Resuelto ───────────────────────────────────────────────────────────
 function ModalResuelto({ reporte, onClose, onResuelto }) {
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
@@ -250,7 +268,6 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
     <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.8)", backdropFilter:"blur(4px)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div style={{ background:"#1C1917", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:480, padding:"24px", maxHeight:"80vh", overflowY:"auto" }}>
         <div style={{ width:48, height:4, background:"#44403C", borderRadius:99, margin:"0 auto 20px" }} />
-
         {listo ? (
           <div style={{ textAlign:"center", padding:"24px 0" }}>
             <div style={{ fontSize:56, marginBottom:12 }}>🎉</div>
@@ -264,17 +281,15 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
               <h2 style={{ color:"#FAFAF9", fontSize:20, fontWeight:800, margin:0 }}>¿Ya lo arreglaron?</h2>
               <button onClick={onClose} style={{ background:"#292524", border:"none", color:"#A8A29E", borderRadius:8, padding:"6px 10px", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
-            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:20, lineHeight:1.6 }}>
-              Si pasaste por el lugar y ya está arreglado, sube una foto como evidencia y el pin cambiará a 🟢 en el mapa.
-            </p>
-            <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, padding:"20px", borderRadius:12, border:`2px dashed ${fotoPreview ? "#22C55E" : "#44403C"}`, cursor:"pointer", marginBottom:16, background: fotoPreview ? "#16A34A12" : "transparent" }}>
+            <p style={{ color:"#A8A29E", fontSize:14, marginBottom:20, lineHeight:1.6 }}>Si pasaste por el lugar y ya está arreglado, sube una foto como evidencia y el pin cambiará a 🟢 en el mapa.</p>
+            <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, padding:"20px", borderRadius:12, border:`2px dashed ${fotoPreview ? "#22C55E" : "#44403C"}`, cursor:"pointer", marginBottom:16, background:fotoPreview ? "#16A34A12" : "transparent" }}>
               <input type="file" accept="image/*" capture="environment" onChange={handleFoto} style={{ display:"none" }} />
               {fotoPreview
                 ? <><img src={fotoPreview} alt="preview" style={{ width:"100%", borderRadius:8, maxHeight:180, objectFit:"cover" }} /><span style={{ color:"#22C55E", fontWeight:600, fontSize:14 }}>📸 Foto del arreglo lista</span></>
                 : <><span style={{ fontSize:36 }}>📷</span><span style={{ color:"#78716C", fontSize:14 }}>Tomar foto del arreglo</span><span style={{ color:"#44403C", fontSize:12 }}>Requerida para confirmar</span></>
               }
             </label>
-            <button onClick={handleSubmit} disabled={enviando || !fotoFile} style={{ width:"100%", background: !fotoFile ? "#292524" : enviando ? "#78716C" : "#22C55E", color: !fotoFile ? "#44403C" : "white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor: !fotoFile ? "not-allowed" : "pointer" }}>
+            <button onClick={handleSubmit} disabled={enviando || !fotoFile} style={{ width:"100%", background:!fotoFile ? "#292524" : enviando ? "#78716C" : "#22C55E", color:!fotoFile ? "#44403C" : "white", border:"none", borderRadius:14, padding:"16px", fontSize:16, fontWeight:700, cursor:!fotoFile ? "not-allowed" : "pointer" }}>
               {enviando ? "Guardando..." : "✅ Confirmar que está resuelto"}
             </button>
           </>
@@ -284,16 +299,14 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
   );
 }
 
-// ─── Panel detalle del reporte ────────────────────────────────────────────────
+// ─── Panel Detalle ────────────────────────────────────────────────────────────
 function PanelDetalle({ reporte, onClose, onVotar, onAbrirResuelto }) {
   const cfg = TIPO_CONFIG[reporte.tipo] || TIPO_CONFIG.bache;
   const estadoCfg = ESTADO_CONFIG[reporte.estado] || ESTADO_CONFIG.reportado;
   const isResuelto = reporte.estado === "resuelto";
-
   return (
     <div style={{ position:"absolute", bottom:0, left:0, right:0, zIndex:1000, background:"#1C1917", borderRadius:"20px 20px 0 0", padding:"20px", boxShadow:"0 -4px 24px rgba(0,0,0,0.6)", maxHeight:"55vh", overflowY:"auto" }}>
       <div style={{ width:40, height:4, background:"#44403C", borderRadius:99, margin:"0 auto 16px" }} />
-
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
         <div style={{ display:"flex", gap:10, alignItems:"center" }}>
           <span style={{ fontSize:28 }}>{cfg.emoji}</span>
@@ -304,62 +317,46 @@ function PanelDetalle({ reporte, onClose, onVotar, onAbrirResuelto }) {
         </div>
         <button onClick={onClose} style={{ background:"#292524", border:"none", color:"#78716C", borderRadius:8, padding:"4px 8px", cursor:"pointer" }}>✕</button>
       </div>
-
-      {/* Estado */}
       <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:`${estadoCfg.color}22`, border:`1px solid ${estadoCfg.color}44`, borderRadius:99, padding:"4px 12px", marginBottom:12 }}>
         <span style={{ fontSize:10 }}>{estadoCfg.dot}</span>
         <span style={{ color:estadoCfg.color, fontSize:13, fontWeight:600 }}>{estadoCfg.label}</span>
       </div>
-
       {reporte.descripcion && <p style={{ color:"#A8A29E", fontSize:14, marginBottom:12, lineHeight:1.5 }}>"{reporte.descripcion}"</p>}
-
-      {/* Foto del daño */}
       {reporte.foto_url && (
         <div style={{ marginBottom:12 }}>
           <div style={{ color:"#78716C", fontSize:11, marginBottom:4 }}>📷 FOTO DEL DAÑO</div>
           <img src={reporte.foto_url} alt="Foto del daño" style={{ width:"100%", borderRadius:10, maxHeight:150, objectFit:"cover" }} />
         </div>
       )}
-
-      {/* Foto del arreglo si está resuelto */}
       {reporte.foto_resuelto_url && (
         <div style={{ marginBottom:12 }}>
           <div style={{ color:"#22C55E", fontSize:11, marginBottom:4 }}>✅ FOTO DEL ARREGLO</div>
           <img src={reporte.foto_resuelto_url} alt="Foto del arreglo" style={{ width:"100%", borderRadius:10, maxHeight:150, objectFit:"cover" }} />
         </div>
       )}
-
-      {/* Votos y presión */}
       {!isResuelto && (
         <div style={{ background:"#292524", borderRadius:12, padding:"12px", marginBottom:12 }}>
           <div style={{ color:"#A8A29E", fontSize:12, marginBottom:6 }}>PRESIÓN COMUNITARIA</div>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ flex:1, background:"#1C1917", borderRadius:99, height:8 }}>
-              <div style={{ width:`${Math.min((reporte.votos / 50) * 100, 100)}%`, height:"100%", borderRadius:99, background: reporte.votos >= 20 ? "#EF4444" : reporte.votos >= 10 ? "#F97316" : "#F59E0B", transition:"width 0.5s" }} />
+              <div style={{ width:`${Math.min(((reporte.votos||1)/50)*100,100)}%`, height:"100%", borderRadius:99, background:reporte.votos>=20 ? "#EF4444" : reporte.votos>=10 ? "#F97316" : "#F59E0B", transition:"width 0.5s" }} />
             </div>
             <span style={{ color:"#F97316", fontWeight:800, fontSize:16 }}>{reporte.votos} 🔥</span>
           </div>
           <div style={{ color:"#44403C", fontSize:11, marginTop:4 }}>
-            {reporte.votos < 5 && "Pocos vecinos lo han visto — compártelo"}
-            {reporte.votos >= 5 && reporte.votos < 20 && "Creciendo — sigue compartiendo"}
-            {reporte.votos >= 20 && reporte.votos < 50 && "¡Alta presión! El pin es muy visible en el mapa"}
-            {reporte.votos >= 50 && "🚨 Punto crítico — máxima visibilidad en el mapa"}
+            {(reporte.votos||1) < 5 && "Pocos vecinos lo han visto — compártelo"}
+            {(reporte.votos||1) >= 5 && (reporte.votos||1) < 20 && "Creciendo — sigue compartiendo"}
+            {(reporte.votos||1) >= 20 && (reporte.votos||1) < 50 && "¡Alta presión! El pin es muy visible en el mapa"}
+            {(reporte.votos||1) >= 50 && "🚨 Punto crítico — máxima visibilidad en el mapa"}
           </div>
         </div>
       )}
-
-      {/* Acciones */}
       {!isResuelto && (
         <div style={{ display:"flex", gap:10 }}>
-          <button onClick={() => onVotar(reporte.id)} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#F9731618", border:"1.5px solid #F9731644", borderRadius:10, padding:"12px", cursor:"pointer", color:"#F97316", fontWeight:700, fontSize:14 }}>
-            🔥 Yo también lo veo
-          </button>
-          <button onClick={onAbrirResuelto} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#22C55E18", border:"1.5px solid #22C55E44", borderRadius:10, padding:"12px", cursor:"pointer", color:"#22C55E", fontWeight:700, fontSize:14 }}>
-            ✅ Ya lo arreglaron
-          </button>
+          <button onClick={() => onVotar(reporte.id)} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#F9731618", border:"1.5px solid #F9731644", borderRadius:10, padding:"12px", cursor:"pointer", color:"#F97316", fontWeight:700, fontSize:14 }}>🔥 Yo también lo veo</button>
+          <button onClick={onAbrirResuelto} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, background:"#22C55E18", border:"1.5px solid #22C55E44", borderRadius:10, padding:"12px", cursor:"pointer", color:"#22C55E", fontWeight:700, fontSize:14 }}>✅ Ya lo arreglaron</button>
         </div>
       )}
-
       {isResuelto && (
         <div style={{ textAlign:"center", padding:"12px", background:"#22C55E12", border:"1px solid #22C55E33", borderRadius:12, color:"#22C55E", fontWeight:600, fontSize:14 }}>
           🎉 Este daño fue resuelto gracias a la comunidad
@@ -380,8 +377,20 @@ export default function App() {
   const [reporteSeleccionado, setReporteSeleccionado] = useState(null);
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [modoReporte, setModoReporte] = useState(false);
+  const [ubicacionUsuario, setUbicacionUsuario] = useState(null); // ← NUEVO
 
-  useEffect(() => { cargarReportes(); }, []);
+  useEffect(() => {
+    cargarReportes();
+    // Centrar mapa en ubicación del usuario al abrir la app
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {} // Si niega el permiso queda en Cali centro
+      );
+    }
+  }, []);
 
   const cargarReportes = async () => {
     setCargando(true);
@@ -440,7 +449,10 @@ export default function App() {
           <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg, #F97316, #EA580C)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🕳️</div>
           <div>
             <div style={{ color:"#FAFAF9", fontWeight:900, fontSize:18, letterSpacing:"-0.5px" }}>Bache<span style={{ color:"#F97316" }}>Alert</span></div>
-            <div style={{ color:"#78716C", fontSize:11 }}>Cali, Valle del Cauca</div>
+            <div style={{ color:"#78716C", fontSize:11 }}>
+              Cali, Valle del Cauca
+              {ubicacionUsuario && <span style={{ color:"#3B82F6", marginLeft:6 }}>📍 Tu ubicación activa</span>}
+            </div>
           </div>
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -458,7 +470,7 @@ export default function App() {
       {/* Tabs */}
       <div style={{ display:"flex", background:"#1C1917", borderBottom:"1px solid #292524", flexShrink:0 }}>
         {[{ id:"mapa", label:"🗺️ Mapa" }, { id:"lista", label:"📋 Lista" }, { id:"stats", label:"📊 Cifras" }].map(tab => (
-          <button key={tab.id} onClick={() => setVistaActiva(tab.id)} style={{ flex:1, padding:"12px 8px", border:"none", background:"transparent", color:vistaActiva === tab.id ? "#F97316" : "#78716C", fontWeight:vistaActiva === tab.id ? 700 : 500, fontSize:13, cursor:"pointer", borderBottom:vistaActiva === tab.id ? "2px solid #F97316" : "2px solid transparent" }}>
+          <button key={tab.id} onClick={() => setVistaActiva(tab.id)} style={{ flex:1, padding:"12px 8px", border:"none", background:"transparent", color:vistaActiva===tab.id ? "#F97316" : "#78716C", fontWeight:vistaActiva===tab.id ? 700 : 500, fontSize:13, cursor:"pointer", borderBottom:vistaActiva===tab.id ? "2px solid #F97316" : "2px solid transparent" }}>
             {tab.label}
           </button>
         ))}
@@ -469,27 +481,22 @@ export default function App() {
         {/* MAPA */}
         {vistaActiva === "mapa" && (
           <div style={{ width:"100%", height:"100%", position:"relative" }}>
-            <MapaReportes reportes={reportesFiltrados} onMapClick={handleMapClick} reporteSeleccionado={reporteSeleccionado} setReporteSeleccionado={setReporteSeleccionado} modoReporte={modoReporte} />
-            {/* Leyenda */}
+            <MapaReportes
+              reportes={reportesFiltrados}
+              onMapClick={handleMapClick}
+              reporteSeleccionado={reporteSeleccionado}
+              setReporteSeleccionado={setReporteSeleccionado}
+              ubicacionUsuario={ubicacionUsuario}
+            />
             <div style={{ position:"absolute", top:12, right:12, zIndex:500, background:"rgba(28,25,23,0.93)", borderRadius:12, padding:"10px 14px" }}>
               <div style={{ color:"#78716C", fontSize:10, marginBottom:6, fontWeight:600 }}>LEYENDA</div>
-              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                <span style={{ fontSize:10 }}>🔴</span><span style={{ color:"#A8A29E", fontSize:11 }}>Reportado</span>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                <span style={{ fontSize:10 }}>🟢</span><span style={{ color:"#A8A29E", fontSize:11 }}>Resuelto</span>
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <span style={{ fontSize:10 }}>📌</span><span style={{ color:"#A8A29E", fontSize:11 }}>+ votos = + grande</span>
-              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🔴</span><span style={{ color:"#A8A29E", fontSize:11 }}>Reportado</span></div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🟢</span><span style={{ color:"#A8A29E", fontSize:11 }}>Resuelto</span></div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🔵</span><span style={{ color:"#A8A29E", fontSize:11 }}>Tu ubicación</span></div>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}><span style={{ fontSize:10 }}>📌</span><span style={{ color:"#A8A29E", fontSize:11 }}>+ votos = + grande</span></div>
             </div>
             {reporteSeleccionado && (
-              <PanelDetalle
-                reporte={reporteSeleccionado}
-                onClose={() => setReporteSeleccionado(null)}
-                onVotar={handleVotar}
-                onAbrirResuelto={() => setModalResuelto(true)}
-              />
+              <PanelDetalle reporte={reporteSeleccionado} onClose={() => setReporteSeleccionado(null)} onVotar={handleVotar} onAbrirResuelto={() => setModalResuelto(true)} />
             )}
           </div>
         )}
@@ -498,15 +505,15 @@ export default function App() {
         {vistaActiva === "lista" && (
           <div style={{ height:"100%", overflowY:"auto", padding:"16px" }}>
             <div style={{ display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
-              {["todos", "bache", "luz", "basura"].map(t => (
-                <button key={t} onClick={() => setFiltroTipo(t)} style={{ whiteSpace:"nowrap", padding:"6px 14px", borderRadius:99, border:"none", cursor:"pointer", fontSize:13, fontWeight:600, background:filtroTipo === t ? "#F97316" : "#292524", color:filtroTipo === t ? "white" : "#78716C" }}>
-                  {t === "todos" ? "Todos" : TIPO_CONFIG[t].label}
+              {["todos","bache","luz","basura"].map(t => (
+                <button key={t} onClick={() => setFiltroTipo(t)} style={{ whiteSpace:"nowrap", padding:"6px 14px", borderRadius:99, border:"none", cursor:"pointer", fontSize:13, fontWeight:600, background:filtroTipo===t ? "#F97316" : "#292524", color:filtroTipo===t ? "white" : "#78716C" }}>
+                  {t==="todos" ? "Todos" : TIPO_CONFIG[t].label}
                 </button>
               ))}
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {cargando && <div style={{ textAlign:"center", color:"#78716C", paddingTop:40 }}>Cargando reportes...</div>}
-              {!cargando && reportesFiltrados.length === 0 && <div style={{ textAlign:"center", color:"#44403C", paddingTop:40 }}>No hay reportes aún. ¡Sé el primero!</div>}
+              {!cargando && reportesFiltrados.length===0 && <div style={{ textAlign:"center", color:"#44403C", paddingTop:40 }}>No hay reportes aún. ¡Sé el primero!</div>}
               {reportesFiltrados.map(r => {
                 const cfg = TIPO_CONFIG[r.tipo] || TIPO_CONFIG.bache;
                 const estadoCfg = ESTADO_CONFIG[r.estado] || ESTADO_CONFIG.reportado;
@@ -519,13 +526,13 @@ export default function App() {
                       </div>
                       <span style={{ fontSize:11, fontWeight:600, color:estadoCfg.color, background:`${estadoCfg.color}18`, padding:"3px 8px", borderRadius:99 }}>{estadoCfg.label}</span>
                     </div>
-                    <div style={{ color:"#78716C", fontSize:13, marginBottom:6 }}>📍 {r.barrio || "Cali"} · {r.created_at ? new Date(r.created_at).toLocaleDateString("es-CO") : ""}</div>
+                    <div style={{ color:"#78716C", fontSize:13, marginBottom:6 }}>📍 {r.barrio||"Cali"} · {r.created_at ? new Date(r.created_at).toLocaleDateString("es-CO") : ""}</div>
                     {r.descripcion && <div style={{ color:"#A8A29E", fontSize:13, marginBottom:8 }}>{r.descripcion}</div>}
                     <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                       <div style={{ flex:1, background:"#292524", borderRadius:99, height:4 }}>
-                        <div style={{ width:`${Math.min(((r.votos||1) / 50) * 100, 100)}%`, height:"100%", borderRadius:99, background:"#F97316" }} />
+                        <div style={{ width:`${Math.min(((r.votos||1)/50)*100,100)}%`, height:"100%", borderRadius:99, background:"#F97316" }} />
                       </div>
-                      <span style={{ color:"#F97316", fontSize:13, fontWeight:700 }}>🔥 {r.votos || 1}</span>
+                      <span style={{ color:"#F97316", fontSize:13, fontWeight:700 }}>🔥 {r.votos||1}</span>
                     </div>
                   </div>
                 );
@@ -541,10 +548,10 @@ export default function App() {
             <p style={{ color:"#78716C", fontSize:14, marginBottom:24 }}>Veeduría ciudadana en tiempo real</p>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:24 }}>
               {[
-                { num:stats.total,     label:"Total reportes",  color:"#F97316", emoji:"📢" },
-                { num:stats.votos,     label:"Votos ciudadanos",color:"#EF4444", emoji:"🔥" },
-                { num:stats.reportados,label:"Sin resolver",    color:"#F59E0B", emoji:"🔴" },
-                { num:stats.resueltos, label:"Resueltos",       color:"#22C55E", emoji:"🟢" },
+                { num:stats.total,      label:"Total reportes",   color:"#F97316", emoji:"📢" },
+                { num:stats.votos,      label:"Votos ciudadanos", color:"#EF4444", emoji:"🔥" },
+                { num:stats.reportados, label:"Sin resolver",     color:"#F59E0B", emoji:"🔴" },
+                { num:stats.resueltos,  label:"Resueltos",        color:"#22C55E", emoji:"🟢" },
               ].map(s => (
                 <div key={s.label} style={{ background:"#1C1917", borderRadius:16, padding:"20px", border:`1px solid ${s.color}33` }}>
                   <div style={{ fontSize:22, marginBottom:6 }}>{s.emoji}</div>
@@ -553,15 +560,13 @@ export default function App() {
                 </div>
               ))}
             </div>
-
-            {/* Top reportes más votados */}
             <div style={{ background:"#1C1917", borderRadius:16, padding:"20px", marginBottom:16 }}>
               <h3 style={{ color:"#FAFAF9", fontWeight:700, marginBottom:14, fontSize:15 }}>🔥 Puntos más críticos</h3>
-              {reportes.filter(r => r.estado === "reportado").sort((a,b) => (b.votos||0)-(a.votos||0)).slice(0,3).map((r, i) => (
+              {reportes.filter(r => r.estado==="reportado").sort((a,b) => (b.votos||0)-(a.votos||0)).slice(0,3).map((r,i) => (
                 <div key={r.id} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
                   <div style={{ color:"#F97316", fontWeight:900, fontSize:18, width:24 }}>#{i+1}</div>
                   <div style={{ flex:1 }}>
-                    <div style={{ color:"#FAFAF9", fontSize:13, fontWeight:600 }}>{TIPO_CONFIG[r.tipo]?.emoji} {r.barrio || "Cali"}</div>
+                    <div style={{ color:"#FAFAF9", fontSize:13, fontWeight:600 }}>{TIPO_CONFIG[r.tipo]?.emoji} {r.barrio||"Cali"}</div>
                     <div style={{ background:"#292524", borderRadius:99, height:4, marginTop:4 }}>
                       <div style={{ width:`${Math.min(((r.votos||1)/50)*100,100)}%`, height:"100%", borderRadius:99, background:"#F97316" }} />
                     </div>
@@ -569,9 +574,8 @@ export default function App() {
                   <div style={{ color:"#F97316", fontWeight:700, fontSize:14 }}>{r.votos||1} 🔥</div>
                 </div>
               ))}
-              {reportes.filter(r => r.estado === "reportado").length === 0 && <div style={{ color:"#44403C", fontSize:13 }}>No hay reportes activos aún</div>}
+              {reportes.filter(r => r.estado==="reportado").length===0 && <div style={{ color:"#44403C", fontSize:13 }}>No hay reportes activos aún</div>}
             </div>
-
             <div style={{ background:"linear-gradient(135deg, #F9731618, #EA580C18)", border:"1px solid #F9731633", borderRadius:16, padding:"20px", textAlign:"center" }}>
               <div style={{ fontSize:32, marginBottom:8 }}>🏙️</div>
               <div style={{ color:"#FAFAF9", fontWeight:800, fontSize:16, marginBottom:6 }}>¿Ves un daño en tu barrio?</div>
