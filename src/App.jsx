@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://zthbdddipsoqohxdljzk.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0aGJkZGRpcHNvcW9oeGRsanprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzUyNzIsImV4cCI6MjA5NzgxMTI3Mn0.2NVuba1vzBxhL4tJrJlFoxeBwzIlnk7tTvxgVXOajMo";
+const SUPABASE_URL = "https://TU_URL_AQUI.supabase.co";
+const SUPABASE_KEY = "TU_ANON_KEY_AQUI";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const TIPO_CONFIG = {
@@ -437,7 +437,7 @@ export default function App() {
   const [filtroMapa, setFiltroMapa] = useState("todos");
   const [modoReporte, setModoReporte] = useState(false);
   const [ubicacionUsuario, setUbicacionUsuario] = useState(null);
-  const centrarRef = useRef(null);
+
 
   useEffect(() => {
     // Pedir GPS inmediatamente
@@ -578,23 +578,8 @@ export default function App() {
           {vistaActiva === "mapa" && (
             <div style={{ width:"100%", height:"100%", position:"relative" }}>
 
-              {/* Filtros sobre el mapa */}
-              <div style={{ position:"absolute", top:10, left:10, zIndex:500, display:"flex", gap:6, flexWrap:"wrap" }}>
-                {["todos","bache","luz","basura"].map(t => (
-                  <button key={t} onClick={() => setFiltroMapa(t)} style={{
-                    padding:"6px 12px", borderRadius:99, border:"none", cursor:"pointer",
-                    fontSize:12, fontWeight:700,
-                    background:filtroMapa===t?"#F97316":"rgba(28,25,23,0.92)",
-                    color:filtroMapa===t?"white":"#A8A29E",
-                    boxShadow:"0 2px 8px rgba(0,0,0,0.3)",
-                  }}>
-                    {t==="todos"?"Todos":TIPO_CONFIG[t].emoji+" "+TIPO_CONFIG[t].label.split(" ")[0]}
-                  </button>
-                ))}
-              </div>
-
-              {/* Leyenda y botón mi ubicación */}
-              <div style={{ position:"absolute", top:10, right:10, zIndex:500, display:"flex", flexDirection:"column", gap:8 }}>
+              {/* Leyenda — solo arriba a la derecha */}
+              <div style={{ position:"absolute", top:10, right:10, zIndex:500 }}>
                 <div style={{ background:"rgba(28,25,23,0.93)", borderRadius:12, padding:"10px 14px" }}>
                   <div style={{ color:"#78716C", fontSize:10, marginBottom:6, fontWeight:600 }}>LEYENDA</div>
                   <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🔴</span><span style={{ color:"#A8A29E", fontSize:11 }}>Reportado</span></div>
@@ -602,14 +587,22 @@ export default function App() {
                   <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}><span style={{ fontSize:10 }}>🔵</span><span style={{ color:"#A8A29E", fontSize:11 }}>Tu ubicación</span></div>
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}><span style={{ fontSize:10 }}>📌</span><span style={{ color:"#A8A29E", fontSize:11 }}>+votos=+grande</span></div>
                 </div>
-                {/* Botón mi ubicación */}
-                {ubicacionUsuario && (
-                  <button
-                    onClick={() => centrarRef.current && centrarRef.current()}
-                    style={{ background:"rgba(28,25,23,0.93)", border:"none", borderRadius:12, padding:"10px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}
-                    title="Mi ubicación"
-                  >🎯</button>
-                )}
+              </div>
+
+              {/* Filtros — abajo a la izquierda, encima del zoom */}
+              <div style={{ position:"absolute", bottom:80, left:10, zIndex:500, display:"flex", gap:6, flexDirection:"column" }}>
+                {["todos","bache","luz","basura"].map(t => (
+                  <button key={t} onClick={() => setFiltroMapa(t)} style={{
+                    padding:"6px 12px", borderRadius:99, border:"none", cursor:"pointer",
+                    fontSize:12, fontWeight:700,
+                    background:filtroMapa===t?"#F97316":"rgba(28,25,23,0.92)",
+                    color:filtroMapa===t?"white":"#A8A29E",
+                    boxShadow:"0 2px 8px rgba(0,0,0,0.3)",
+                    textAlign:"left",
+                  }}>
+                    {t==="todos"?"🗺️ Todos":TIPO_CONFIG[t].emoji+" "+TIPO_CONFIG[t].label}
+                  </button>
+                ))}
               </div>
 
               <MapaReportes
@@ -620,7 +613,7 @@ export default function App() {
                 ubicacionUsuario={ubicacionUsuario}
                 modoReporte={modoReporte}
                 filtroMapa={filtroMapa}
-                onCentrarUbicacion={(fn) => { centrarRef.current = fn; }}
+
               />
 
               {reporteSeleccionado && (
