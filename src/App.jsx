@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://zthbdddipsoqohxdljzk.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0aGJkZGRpcHNvcW9oeGRsanprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzUyNzIsImV4cCI6MjA5NzgxMTI3Mn0.2NVuba1vzBxhL4tJrJlFoxeBwzIlnk7tTvxgVXOajMo";
+const SUPABASE_URL = "https://TU_URL_AQUI.supabase.co";
+const SUPABASE_KEY = "TU_ANON_KEY_AQUI";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const TIPO_CONFIG = {
@@ -440,8 +440,15 @@ export default function App() {
 
 
   useEffect(() => {
-    // Pedir GPS inmediatamente
+    // GPS con máxima prioridad — antes que todo
     if ("geolocation" in navigator) {
+      // Intento rápido primero (menos preciso pero instantáneo)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {},
+        { enableHighAccuracy: false, timeout: 3000, maximumAge: 30000 }
+      );
+      // Luego intento preciso
       navigator.geolocation.getCurrentPosition(
         (pos) => setUbicacionUsuario({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         (err) => console.log("GPS no disponible:", err.message),
@@ -449,8 +456,7 @@ export default function App() {
       );
     }
     cargarReportes();
-    // Splash mínimo 2 segundos
-    setTimeout(() => setSplash(false), 2000);
+    setTimeout(() => setSplash(false), 1500);
   }, []);
 
   // Realtime — votos y estados en tiempo real
@@ -589,18 +595,18 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Filtros — abajo a la izquierda, encima del zoom */}
-              <div style={{ position:"absolute", bottom:80, left:10, zIndex:500, display:"flex", gap:6, flexDirection:"column" }}>
+              {/* Filtros — fila horizontal arriba, debajo de la leyenda no se solapan */}
+              <div style={{ position:"absolute", top:10, left:10, zIndex:500, display:"flex", gap:5, flexWrap:"wrap", maxWidth:"55%" }}>
                 {["todos","bache","luz","basura"].map(t => (
                   <button key={t} onClick={() => setFiltroMapa(t)} style={{
-                    padding:"6px 12px", borderRadius:99, border:"none", cursor:"pointer",
-                    fontSize:12, fontWeight:700,
+                    padding:"5px 10px", borderRadius:99, border:"none", cursor:"pointer",
+                    fontSize:11, fontWeight:700,
                     background:filtroMapa===t?"#F97316":"rgba(28,25,23,0.92)",
                     color:filtroMapa===t?"white":"#A8A29E",
                     boxShadow:"0 2px 8px rgba(0,0,0,0.3)",
-                    textAlign:"left",
+                    whiteSpace:"nowrap",
                   }}>
-                    {t==="todos"?"🗺️ Todos":TIPO_CONFIG[t].emoji+" "+TIPO_CONFIG[t].label}
+                    {t==="todos"?"Todos":TIPO_CONFIG[t].emoji}
                   </button>
                 ))}
               </div>
