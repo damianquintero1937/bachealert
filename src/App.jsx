@@ -22,6 +22,32 @@ function pinSize(votos) {
   return 30;
 }
 
+// ─── Comprimir foto antes de subir ──────────────────────────────────────────
+function comprimirFoto(file, maxWidth = 1200, calidad = 0.7) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => resolve(blob), "image/jpeg", calidad);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── Splash Screen ────────────────────────────────────────────────────────────
 function SplashScreen() {
   return (
@@ -185,9 +211,9 @@ function ModalReporte({ ubicacion, onClose, onSubmit, onCambiarUbicacion }) {
     try {
       let foto_url = null;
       if (fotoFile) {
-        const ext = fotoFile.name.split('.').pop() || 'jpg';
-        const nombre = `reporte_${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: fotoFile.type || "image/jpeg" });
+        const blob = await comprimirFoto(fotoFile);
+        const nombre = `reporte_${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, blob, { contentType: "image/jpeg" });
         if (!upErr) {
           const { data: urlData } = supabase.storage.from("fotos-reportes").getPublicUrl(nombre);
           foto_url = urlData.publicUrl;
@@ -303,9 +329,9 @@ function ModalResuelto({ reporte, onClose, onResuelto }) {
     setEnviando(true);
     try {
       let foto_resuelto_url = null;
-      const ext = fotoFile.name.split('.').pop() || 'jpg';
-      const nombre = `resuelto_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, fotoFile, { contentType: fotoFile.type || "image/jpeg" });
+      const blob = await comprimirFoto(fotoFile);
+      const nombre = `resuelto_${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage.from("fotos-reportes").upload(nombre, blob, { contentType: "image/jpeg" });
       if (!upErr) {
         const { data: urlData } = supabase.storage.from("fotos-reportes").getPublicUrl(nombre);
         foto_resuelto_url = urlData.publicUrl;
